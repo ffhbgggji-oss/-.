@@ -9,18 +9,20 @@ contents: write
 jobs:
 extract:
 runs-on: ubuntu-latest
+
 steps:
-- uses: actions/checkout@v4
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
   - name: Extract ZIP
     run: |
       mkdir -p project
-      unzip -o CartoonStudio-repaired.zip -d project
+      python3 -c "import zipfile; zipfile.ZipFile('CartoonStudio-repaired.zip').extractall('project')"
 
   - name: Commit extracted files
     run: |
       git config user.name "github-actions[bot]"
       git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       git add project
-      git commit -m "Extract CartoonStudio project" || echo "No changes"
+      git commit -m "Extract CartoonStudio project" || true
       git push

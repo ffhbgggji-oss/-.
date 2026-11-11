@@ -1,28 +1,27 @@
 name: Extract project ZIP
 
-on:
-workflow_dispatch:
+"on":
+  workflow_dispatch:
 
 permissions:
-contents: write
+  contents: write
 
 jobs:
-extract:
-runs-on: ubuntu-latest
+  extract:
+    runs-on: ubuntu-latest
 
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - name: Extract ZIP
-    run: |
-      mkdir -p project
-      python3 -c "import zipfile; zipfile.ZipFile('CartoonStudio-repaired.zip').extractall('project')"
+      - name: Extract ZIP
+        run: |
+          python3 -m zipfile -e CartoonStudio-repaired.zip project
 
-  - name: Commit extracted files
-    run: |
-      git config user.name "github-actions[bot]"
-      git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      git add project
-      git commit -m "Extract CartoonStudio project" || true
-      git push
+      - name: Save extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add project/
+          git commit -m "Extract project ZIP" || true
+          git push

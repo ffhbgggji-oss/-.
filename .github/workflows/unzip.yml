@@ -1,0 +1,26 @@
+name: Extract project ZIP
+
+on:
+workflow_dispatch:
+
+permissions:
+contents: write
+
+jobs:
+extract:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+
+  - name: Extract ZIP
+    run: |
+      mkdir -p project
+      unzip -o CartoonStudio-repaired.zip -d project
+
+  - name: Commit extracted files
+    run: |
+      git config user.name "github-actions[bot]"
+      git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      git add project
+      git commit -m "Extract CartoonStudio project" || echo "No changes"
+      git push

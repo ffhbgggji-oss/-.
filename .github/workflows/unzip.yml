@@ -7,39 +7,57 @@ name: Build CartoonStudio APK
       - main
       - master
 
-permissions:
-  contents: read
-
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Download project
+      # 1. Получение проекта
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Java
+      # 2. Установка Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      - name: Install Godot
-        run: |
-          wget -q https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_linux.x86_64.zip -O godot.zip
-          unzip -q godot.zip -d godot
-          sudo install godot/Godot_v4.2.1-stable_linux.x86_64 /usr/local/bin/godot
-
-          wget -q https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz -O templates.tpz
-          mkdir -p ~/.local/share/godot/export_templates/4.2.1.stable
-          unzip -q templates.tpz -d templates
-          cp -a templates/templates/. ~/.local/share/godot/export_templates/4.2.1.stable/
-
-      - name: Install Gradle
+      # 3. Установка Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.2.1'
+          gradle-version: "8.2.1"
 
+      # 4. Установка Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 5. Android SDK компоненты
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" "ndk;23.2.8568313" "cmake;3.10.2.4988404"
+
+      # 6. Загрузка Godot 4.2.1
+      - name: Install Godot
+        run: |
+          wget https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_linux.x86_64.zip -O godot.zip
+          unzip godot.zip -d godot
+          sudo mv godot/Godot_v4.2.1-stable_linux.x86_64 /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+          godot --version
+
+      # 7. Установка экспортных шаблонов
+      - name: Install Godot export templates
+        run: |
+          wget https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz -O templates.tpz
+          mkdir templates
+          unzip templates.tpz -d templates
+          mkdir -p ~/.local/share/godot/export_templates/4.2.1.stable
+          cp -r templates/templates/* ~/.local/share/godot/export_templates/4.2.1.stable/
+
+      # 8. Сборка Android-плагина
       - name: Build Android plugin
         run: |
           cd android-plugin
@@ -48,22 +66,27 @@ jobs:
           mkdir -p addons/GodotAndroidFilePicker/bin/release
           cp android-plugin/GodotAndroidFilePicker/build/outputs/aar/GodotAndroidFilePicker-release.aar addons/GodotAndroidFilePicker/bin/release/GodotAndroidFilePicker.aar
 
-      - name: Create keystore
+      # 9. Импорт проекта Godot
+      - name: Import Godot project
         run: |
-          mkdir -p build
-          keytool -genkeypair -v -keystore build/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=CartoonStudio,C=US"
+          godot --headless --editor --path . --quit
 
-      - name: Validate project
-        run: godot --headless --editor --path . --quit
+      # 10. Установка Android build template
+      - name: Install Android build template
+        run: |
+          godot --headless --editor --path . --install-android-build-template
 
+      # 11. Сборка APK
       - name: Build APK
         run: |
           mkdir -p build
-          godot --headless --path . --install-android-build-template --export-debug Android build/CartoonStudio-debug.apk
+          godot --headless --path . --export-debug Android build/CartoonStudio-debug.apk
           test -s build/CartoonStudio-debug.apk
 
+      # 12. Сохранение APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CartoonStudio-debug-apk
+          name: CartoonStudio-APK
           path: build/CartoonStudio-debug.apk
+          if-no-files-found: error

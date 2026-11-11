@@ -1,39 +1,69 @@
-name: Extract project ZIP
+name: Build CartoonStudio APK
 
 "on":
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  extract:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
+      - name: Download project
         uses: actions/checkout@v4
 
-      - name: Extract ZIP
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Godot
         run: |
-          mkdir -p extracted
-          python3 -m zipfile -e CartoonStudio-repaired.zip extracted
+          wget -q https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_linux.x86_64.zip -O godot.zip
+          unzip -q godot.zip -d godot
+          sudo install godot/Godot_v4.2.1-stable_linux.x86_64 /usr/local/bin/godot
 
-          ROOT=$(find extracted -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          wget -q https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz -O templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.2.1.stable
+          unzip -q templates.tpz -d templates
+          cp -a templates/templates/. ~/.local/share/godot/export_templates/4.2.1.stable/
 
-          if [ -d "$ROOT" ]; then
-            rsync -a --exclude='.git' --exclude='.github' "$ROOT"/ ./
-          else
-            rsync -a --exclude='.git' --exclude='.github' extracted/ ./
-          fi
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2.1'
 
-          rm -rf extracted project
-          rm -f CartoonStudio-repaired.zip
-
-      - name: Save files
+      - name: Build Android plugin
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Move project files to repository root" || true
-          git push
+          cd android-plugin
+          gradle --no-daemon :GodotAndroidFilePicker:assembleRelease
+          cd ..
+          mkdir -p addons/GodotAndroidFilePicker/bin/release
+          cp android-plugin/GodotAndroidFilePicker/build/outputs/aar/GodotAndroidFilePicker-release.aar addons/GodotAndroidFilePicker/bin/release/GodotAndroidFilePicker.aar
+
+      - name: Create keystore
+        run: |
+          mkdir -p build
+          keytool -genkeypair -v -keystore build/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=CartoonStudio,C=US"
+
+      - name: Validate project
+        run: godot --headless --editor --path . --quit
+
+      - name: Build APK
+        run: |
+          mkdir -p build
+          godot --headless --path . --install-android-build-template --export-debug Android build/CartoonStudio-debug.apk
+          test -s build/CartoonStudio-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoonStudio-debug-apk
+          path: build/CartoonStudio-debug.apk

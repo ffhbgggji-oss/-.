@@ -36,7 +36,7 @@ jobs:
         with:
           packages: platform-tools
 
-      # 5. Android SDK packages
+      # 5. Установка Android SDK
       - name: Install Android SDK packages
         timeout-minutes: 10
         run: |
@@ -50,7 +50,7 @@ jobs:
             "ndk;23.2.8568313" \
             "cmake;3.10.2.4988404"
 
-      # 6. Godot 4.2.1
+      # 6. Установка Godot 4.2.1
       - name: Install Godot
         timeout-minutes: 5
         run: |
@@ -64,7 +64,7 @@ jobs:
 
           godot --version
 
-      # 7. Godot Export Templates
+      # 7. Установка шаблонов Godot
       - name: Install Godot export templates
         timeout-minutes: 5
         run: |
@@ -80,7 +80,7 @@ jobs:
 
           echo "Godot templates installed"
 
-      # 8. Build Android plugin
+      # 8. Сборка Android-плагина
       - name: Build Android plugin
         timeout-minutes: 15
         run: |
@@ -99,19 +99,17 @@ jobs:
 
           echo "Android plugin built successfully"
 
-      # 9. Import Godot project
+      # 9. Импорт проекта Godot
       - name: Import Godot project
         timeout-minutes: 5
         run: |
           godot --headless --editor --path . --quit
 
-      # 10. Install Android Build Template
+      # 10. Установка Android Build Template
       - name: Install Android build template
         timeout-minutes: 5
         run: |
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/4.2.1.stable"
-
-          echo "Checking Android template..."
 
           if [ ! -f "$TEMPLATE_DIR/android_source.zip" ]; then
             echo "ERROR: android_source.zip not found"
@@ -123,20 +121,34 @@ jobs:
 
           unzip -q -o "$TEMPLATE_DIR/android_source.zip" -d android/build
 
-          echo "Checking template files..."
+          echo "Checking Android template..."
 
           find android/build -maxdepth 3 -type f | head -50
 
-          if [ ! -f android/build/build.gradle ]; then
-            echo "ERROR: Android build.gradle not found"
-            exit 1
-          fi
+      # 11. Создание Debug Keystore
+      - name: Generate Debug Keystore
+        timeout-minutes: 2
+        run: |
+          keytool -genkeypair \
+            -v \
+            -keystore "$RUNNER_TEMP/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -validity 9999 \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -deststoretype pkcs12
 
-          echo "Android template installed"
+          echo "Debug keystore created"
 
-      # 11. Build APK
+      # 12. Сборка APK
       - name: Build APK
         timeout-minutes: 15
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
           mkdir -p build
 
@@ -151,7 +163,7 @@ jobs:
 
           echo "APK successfully created"
 
-      # 12. Upload APK
+      # 13. Загрузка APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

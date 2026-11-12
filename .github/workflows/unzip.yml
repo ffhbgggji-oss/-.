@@ -1,5 +1,88 @@
-- name: Build Android plugin
+name: Build CartoonStudio APK
+
+"on":
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      # 1. Загрузка проекта
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Java 17
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # 3. Gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.2.1"
+
+      # 4. Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      # 5. Android SDK packages
+      - name: Install Android SDK packages
         timeout-minutes: 10
+        run: |
+          yes | sdkmanager --licenses
+
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "cmdline-tools;latest" \
+            "ndk;23.2.8568313" \
+            "cmake;3.10.2.4988404"
+
+      # 6. Godot 4.2.1
+      - name: Install Godot
+        timeout-minutes: 5
+        run: |
+          wget https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_linux.x86_64.zip -O godot.zip
+
+          unzip -q godot.zip -d godot
+
+          sudo mv godot/Godot_v4.2.1-stable_linux.x86_64 /usr/local/bin/godot
+
+          sudo chmod +x /usr/local/bin/godot
+
+          godot --version
+
+      # 7. Godot Export Templates
+      - name: Install Godot export templates
+        timeout-minutes: 5
+        run: |
+          wget https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz -O templates.tpz
+
+          mkdir -p templates
+
+          unzip -q templates.tpz -d templates
+
+          mkdir -p ~/.local/share/godot/export_templates/4.2.1.stable
+
+          cp -r templates/templates/* ~/.local/share/godot/export_templates/4.2.1.stable/
+
+          echo "Godot templates installed"
+
+      # 8. Build Android plugin
+      - name: Build Android plugin
+        timeout-minutes: 15
         run: |
           cd android-plugin
 
@@ -13,3 +96,65 @@
 
           cp android-plugin/GodotAndroidFilePicker/build/outputs/aar/GodotAndroidFilePicker-release.aar \
              addons/GodotAndroidFilePicker/bin/release/GodotAndroidFilePicker.aar
+
+          echo "Android plugin built successfully"
+
+      # 9. Import Godot project
+      - name: Import Godot project
+        timeout-minutes: 5
+        run: |
+          godot --headless --editor --path . --quit
+
+      # 10. Install Android Build Template
+      - name: Install Android build template
+        timeout-minutes: 5
+        run: |
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/4.2.1.stable"
+
+          echo "Checking Android template..."
+
+          if [ ! -f "$TEMPLATE_DIR/android_source.zip" ]; then
+            echo "ERROR: android_source.zip not found"
+            ls -la "$TEMPLATE_DIR"
+            exit 1
+          fi
+
+          mkdir -p android/build
+
+          unzip -q -o "$TEMPLATE_DIR/android_source.zip" -d android/build
+
+          echo "Checking template files..."
+
+          find android/build -maxdepth 3 -type f | head -50
+
+          if [ ! -f android/build/build.gradle ]; then
+            echo "ERROR: Android build.gradle not found"
+            exit 1
+          fi
+
+          echo "Android template installed"
+
+      # 11. Build APK
+      - name: Build APK
+        timeout-minutes: 15
+        run: |
+          mkdir -p build
+
+          godot --headless --path . \
+            --export-debug "Android" \
+            build/CartoonStudio-debug.apk
+
+          if [ ! -s build/CartoonStudio-debug.apk ]; then
+            echo "APK was not created"
+            exit 1
+          fi
+
+          echo "APK successfully created"
+
+      # 12. Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartoonStudio-APK
+          path: build/CartoonStudio-debug.apk
+          if-no-files-found: error
